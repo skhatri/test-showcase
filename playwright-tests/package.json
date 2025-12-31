@@ -1,0 +1,15 @@
+{
+  "name": "qway-example-project",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Example repo used for QWay task-type execution tests (playwright + gradle + karate)",
+  "scripts": {
+    "clean": "rm -rf playwright-report test-results",
+    "test": "playwright test",
+    "test:fast": "playwright test --grep @fast"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.49.1"
+  }
+}
+

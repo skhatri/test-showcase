@@ -1,0 +1,15 @@
+{
+  "name": "qway-example-cypress-tests",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Cypress example tests for QWay task-type execution demos",
+  "scripts": {
+    "clean": "rm -rf cypress/videos cypress/screenshots",
+    "test": "cypress run",
+    "test:fast": "cypress run --spec cypress/e2e/local.cy.js"
+  },
+  "devDependencies": {
+    "cypress": "13.15.2"
+  }
+}
+
