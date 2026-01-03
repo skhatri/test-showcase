@@ -7,6 +7,7 @@ This repo is designed to be a **known-good Git execution target** for QWay Task 
 - `selenium` (Java-based) → runs WebDriver tests (HtmlUnit driver for fast/local)
 - `gradle` (Java-based) → runs a small Java module unit test suite
 - `karate` (Gradle-based) → runs a Karate feature that calls SpaceX `/launches`
+- `perf-test` (Gradle) → runs a Gatling Test with embedded http server
 - `make` → provides a single wrapper interface over both Playwright + Gradle/Karate
 
 ## Quickstart
@@ -53,6 +54,12 @@ Run just Karate:
 make karate
 ```
 
+Run just gatling
+
+```bash
+make perf-test
+```
+
 ## Notes (important)
 
 - **Network-dependent tests**:
@@ -60,6 +67,7 @@ make karate
   - Cypress includes a `google.com.au` spec as well
   - Selenium includes a `google.com.au` test as well
   - Karate calls SpaceX API (rate limits / occasional downtime)
+  - Perf-Test runs an http server that has maths endpoint
 - For deterministic/offline runs, use:
 
 ```bash
