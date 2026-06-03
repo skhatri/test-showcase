@@ -10,14 +10,16 @@ java {
 }
 
 dependencies {
+    implementation(project(":java-lib"))
     implementation("io.gatling.highcharts:gatling-charts-highcharts:3.11.5")
     implementation("io.gatling:gatling-app:3.11.5")
 }
 
-tasks.register<JavaExec>("runServer") {
-    group = "application"
-    description = "Run the HTTP server"
-    classpath = sourceSets["main"].runtimeClasspath
-    mainClass.set("com.example.server.HttpServer")
-    standardInput = System.`in`
+// Remove the old server source directory (server is now in java-lib)
+sourceSets {
+    main {
+        java {
+            srcDirs.removeIf { it.toString().contains("com/example/server") }
+        }
+    }
 }

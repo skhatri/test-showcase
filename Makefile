@@ -1,4 +1,4 @@
-.PHONY: all test test-fast playwright playwright-fast playwright-gradle playwright-gradle-fast cypress cypress-fast cypress-gradle cypress-gradle-fast selenium selenium-fast karate karate-fast java clean perf-test start-server stop-server
+.PHONY: all test test-fast playwright playwright-fast playwright-gradle playwright-gradle-fast cypress cypress-fast cypress-gradle cypress-gradle-fast selenium selenium-fast karate karate-fast java clean perf-test k6-test start-server stop-server
 
 PLAYWRIGHT_DIR := playwright-tests
 PLAYWRIGHT_BIN := $(PLAYWRIGHT_DIR)/node_modules/.bin/playwright
@@ -8,6 +8,7 @@ CYPRESS_BIN := $(CYPRESS_DIR)/node_modules/.bin/cypress
 
 SERVER_PID_FILE := .server.pid
 SERVER_PORT := 32108
+CLASSPATH_FILE := java-lib/build/classpath.txt
 
 all: java karate playwright cypress selenium
 
@@ -65,18 +66,34 @@ karate-fast:
 clean:
 	./gradlew clean --no-daemon
 
+# Idempotent server start:
+#   - If port $(SERVER_PORT) is already in use, skips startup (assumes healthy)
+#   - Otherwise compiles java-lib, resolves classpath, and starts the server as a
+#     fully independent background process (survives Gradle shutdown)
+#   - Waits for /health to return 200
 start-server:
-	@echo "Starting HTTP server on port $(SERVER_PORT)..."
-	@./gradlew :gatling-tests:runServer --no-daemon > /dev/null 2>&1 & echo $$! > $(SERVER_PID_FILE)
-	@echo "Waiting for server to start..."
-	@for i in 1 2 3 4 5; do \
-		if curl -s http://localhost:$(SERVER_PORT)/health > /dev/null 2>&1; then \
-			echo "Server started successfully (PID: $$(cat $(SERVER_PID_FILE)))"; \
+	@echo "Checking port $(SERVER_PORT)..."
+	@PID=$$(lsof -ti:$(SERVER_PORT) 2>/dev/null || true); \
+	if [ -n "$$PID" ]; then \
+		echo "Port $(SERVER_PORT) already in use (PID: $$PID). Skipping server start."; \
+	else \
+		echo "Starting HTTP server on port $(SERVER_PORT)..."; \
+		./gradlew :java-lib:classes :java-lib:printClasspath --no-daemon > /dev/null 2>&1; \
+		CLASSPATH=$$(cat $(CLASSPATH_FILE)); \
+		SERVER_PORT=$(SERVER_PORT) nohup java -cp "$$CLASSPATH" com.example.server.HttpServer > /dev/null 2>&1 & \
+		echo $$! > $(SERVER_PID_FILE); \
+	fi; \
+	echo "Waiting for server health check..."; \
+	for i in 1 2 3 4 5 6 7 8 9 10; do \
+		if curl -sf http://localhost:$(SERVER_PORT)/health > /dev/null 2>&1; then \
+			PID=$$(lsof -ti:$(SERVER_PORT) 2>/dev/null || true); \
+			echo "Server is healthy (PID: $$PID)"; \
 			exit 0; \
 		fi; \
 		sleep 1; \
 	done; \
-	echo "Server failed to start" && exit 1
+	echo "Server failed to become healthy within 10s"; \
+	exit 1
 
 stop-server:
 	@if [ -f $(SERVER_PID_FILE) ]; then \
@@ -86,19 +103,28 @@ stop-server:
 		rm -f $(SERVER_PID_FILE); \
 		echo "Server stopped"; \
 	else \
-		echo "Server PID file not found. Checking for process on port $(SERVER_PORT)..."; \
-		PID=$$(lsof -ti:$(SERVER_PORT)); \
+		PID=$$(lsof -ti:$(SERVER_PORT) 2>/dev/null || true); \
 		if [ -n "$$PID" ]; then \
-			echo "Found process $$PID on port $(SERVER_PORT), killing it..."; \
+			echo "Stopping server on port $(SERVER_PORT) (PID: $$PID)..."; \
 			kill $$PID 2>/dev/null || true; \
+			echo "Server stopped"; \
 		else \
-			echo "No server process found"; \
+			echo "No server process found on port $(SERVER_PORT)"; \
 		fi; \
 	fi
 
+# Run Gatling performance tests (starts server if needed, stops after)
 perf-test: start-server
 	@echo "Running Gatling performance tests..."
 	@./gradlew :gatling-tests:gatlingRun --no-daemon; \
 	EXIT_CODE=$$?; \
-	$(MAKE) stop-server; \
+	$(MAKE) stop-server || true; \
+	exit $$EXIT_CODE
+
+# Run k6 performance tests (starts server if needed, stops after)
+k6-test: start-server
+	@echo "Running k6 performance tests..."
+	@(cd k6-test && k6 run scenarios/math_api.js); \
+	EXIT_CODE=$$?; \
+	$(MAKE) stop-server || true; \
 	exit $$EXIT_CODE

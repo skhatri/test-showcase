@@ -8,6 +8,7 @@ This repo is designed to be a **known-good Git execution target** for QWay Task 
 - `gradle` (Java-based) → runs a small Java module unit test suite
 - `karate` (Gradle-based) → runs a Karate feature that calls SpaceX `/launches`
 - `perf-test` (Gradle) → runs a Gatling Test with embedded http server
+- `k6-test` (k6 CLI) → runs equivalent k6 performance test against the same server
 - `make` → provides a single wrapper interface over both Playwright + Gradle/Karate
 
 ## Quickstart
@@ -60,6 +61,12 @@ Run just gatling
 make perf-test
 ```
 
+Run just k6
+
+```bash
+make k6-test
+```
+
 ## Notes (important)
 
 - **Network-dependent tests**:
@@ -68,6 +75,7 @@ make perf-test
   - Selenium includes a `google.com.au` test as well
   - Karate calls SpaceX API (rate limits / occasional downtime)
   - Perf-Test runs an http server that has maths endpoint
+  - k6-test runs the same server with k6 load tests
 - For deterministic/offline runs, use:
 
 ```bash

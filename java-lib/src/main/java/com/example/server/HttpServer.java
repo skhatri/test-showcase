@@ -7,29 +7,62 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.net.BindException;
 import java.util.HashMap;
 import java.util.Map;
 
-public class HttpServer {
-    private static final int PORT = 32108;
+/**
+ * A lightweight, idempotent HTTP server for test scenarios.
+ *
+ * Idempotent startup: if the configured port is already in use, the server
+ * prints a message and exits cleanly (exit code 0) without crashing.
+ *
+ * Environment variables:
+ *   SERVER_PORT  – override the default port (default: 32108)
+ */
+public final class HttpServer {
+
+    private static final int DEFAULT_PORT = 32108;
 
     public static void main(String[] args) throws IOException {
-        com.sun.net.httpserver.HttpServer server = com.sun.net.httpserver.HttpServer.create(
-            new InetSocketAddress(PORT), 0);
+        int port = parsePort();
+        InetSocketAddress addr = new InetSocketAddress("0.0.0.0", port);
 
-        server.createContext("/add", new AddHandler());
-        server.createContext("/multiply", new MultiplyHandler());
-        server.createContext("/health", new HealthHandler());
+        com.sun.net.httpserver.HttpServer jdkServer;
+        try {
+            jdkServer = com.sun.net.httpserver.HttpServer.create(addr, 0);
+        } catch (BindException e) {
+            System.err.println("Port " + port + " is already in use. Server not started.");
+            return;
+        }
 
-        server.setExecutor(null);
-        server.start();
+        jdkServer.createContext("/add", new AddHandler());
+        jdkServer.createContext("/multiply", new MultiplyHandler());
+        jdkServer.createContext("/health", new HealthHandler());
 
-        System.out.println("Server started on port " + PORT);
+        jdkServer.setExecutor(null);
+        jdkServer.start();
+
+        System.out.println("Server started on port " + port);
         System.out.println("Endpoints:");
-        System.out.println("  - http://localhost:" + PORT + "/add?num1=X&num2=Y");
-        System.out.println("  - http://localhost:" + PORT + "/multiply?num1=X&num2=Y");
-        System.out.println("  - http://localhost:" + PORT + "/health");
+        System.out.println("  - http://localhost:" + port + "/add?num1=X&num2=Y");
+        System.out.println("  - http://localhost:" + port + "/multiply?num1=X&num2=Y");
+        System.out.println("  - http://localhost:" + port + "/health");
     }
+
+    private static int parsePort() {
+        try {
+            String env = System.getenv("SERVER_PORT");
+            if (env != null && !env.isBlank()) {
+                return Integer.parseInt(env.trim());
+            }
+        } catch (NumberFormatException ignored) {
+            // fall through to default
+        }
+        return DEFAULT_PORT;
+    }
+
+    // ---------- handlers ----------
 
     static class AddHandler implements HttpHandler {
         @Override
@@ -41,7 +74,8 @@ public class HttpServer {
                 double num2 = Double.parseDouble(params.getOrDefault("num2", "0"));
                 double result = num1 + num2;
 
-                String response = String.format("{\"num1\": %.2f, \"num2\": %.2f, \"operation\": \"add\", \"result\": %.2f}",
+                String response = String.format(
+                    "{\"num1\": %.2f, \"num2\": %.2f, \"operation\": \"add\", \"result\": %.2f}",
                     num1, num2, result);
                 sendResponse(exchange, 200, response);
             } catch (NumberFormatException e) {
@@ -60,7 +94,8 @@ public class HttpServer {
                 double num2 = Double.parseDouble(params.getOrDefault("num2", "0"));
                 double result = num1 * num2;
 
-                String response = String.format("{\"num1\": %.2f, \"num2\": %.2f, \"operation\": \"multiply\", \"result\": %.2f}",
+                String response = String.format(
+                    "{\"num1\": %.2f, \"num2\": %.2f, \"operation\": \"multiply\", \"result\": %.2f}",
                     num1, num2, result);
                 sendResponse(exchange, 200, response);
             } catch (NumberFormatException e) {
@@ -76,15 +111,16 @@ public class HttpServer {
         }
     }
 
+    // ---------- utilities ----------
+
     private static Map<String, String> parseQuery(URI uri) {
         Map<String, String> params = new HashMap<>();
         String query = uri.getQuery();
         if (query != null) {
-            String[] pairs = query.split("&");
-            for (String pair : pairs) {
-                String[] keyValue = pair.split("=");
-                if (keyValue.length == 2) {
-                    params.put(keyValue[0], keyValue[1]);
+            for (String pair : query.split("&")) {
+                String[] kv = pair.split("=", 2);
+                if (kv.length == 2) {
+                    params.put(kv[0], kv[1]);
                 }
             }
         }
